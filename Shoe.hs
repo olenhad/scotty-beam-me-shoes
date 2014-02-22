@@ -2,13 +2,14 @@
 module Shoe where
 
 import Database.MongoDB
+import qualified Database.MongoDB as DB
 import qualified Data.Bson as B
 import Data.Aeson
 import Data.Text
 import Data.Maybe
-
+import Control.Monad.IO.Class
+import Text.Read
 import qualified ShoeJSON as J
-
 
 data Shoe =
      Shoe { description :: !Text
@@ -63,9 +64,11 @@ shoeFromJShoe js = Shoe {description = J.description js,
                         photo = J.photo js,
                         shoeId = Nothing}
 
+
+
 runA pipe act = access pipe master "zalora" act
 
-createShoe :: J.ShoeJSON -> IO String
+
 createShoe js =
            let bsonShoe = shoeToBSON $ shoeFromJShoe js
            in
@@ -73,3 +76,21 @@ createShoe js =
               id <- runA pipe $ insert "shoes" bsonShoe
               putStrLn $ show id
               return $ show id
+
+findShoes =
+          do pipe <- runIOE $ connect $ host "127.0.0.1"
+             shoes <- runA pipe $ DB.find (select [] "shoes") >>= rest
+             return $ case shoes of
+                           Right ss -> Prelude.map  shoeFromBSON ss
+                           Left _ -> error "BC"
+
+findShoeById :: String -> IO (Either String Shoe)
+findShoeById id =
+    case (readEither id :: Either String ObjectId) of
+         Left e ->  do return $ Left e
+         Right oid ->
+               do pipe <- runIOE $ connect $ host "127.0.0.1"
+                  shoe <- runA pipe $ DB.findOne $ select ["_id" =: oid] "shoes"
+                  return $ case shoe of
+                       Right (Just s) -> Right $ shoeFromBSON s
+                       _ -> Left "No Result"
