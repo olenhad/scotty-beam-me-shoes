@@ -36,5 +36,5 @@ renderSingleShoe shoe =
          H.head $ do
              H.title "Shoes"
          H.body $ do
-             H.h1 "All Shoes"
              aShoe shoe
+             H.img H.! A.src (H.toValue ("/img/" ++ S.photo shoe))

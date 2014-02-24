@@ -7,6 +7,7 @@ import Data.Monoid (mconcat)
 import Data.Aeson
 import Data.Text.Lazy as L
 import Data.ByteString.Lazy
+import Data.ByteString.Lazy as BL
 import Control.Applicative
 import Control.Monad
 import Control.Monad.IO.Class
@@ -19,20 +20,28 @@ import qualified Shoe as S
 import qualified ShoeJSON as J
 import qualified Views as V
 
+import Network.Wai.Middleware.Static
+
 data APIFailure =
      APIFailure {reason :: String} deriving (Show, Generic)
 
 instance ToJSON APIFailure
 
 
+createShoe :: BL.ByteString -> ActionM ()
 createShoe jsonShoe =
-  case (eitherDecode jsonShoe) :: Either String J.ShoeJSON  of
-  Left e -> Web.Scotty.json $ APIFailure e
-  Right shoe -> do r <- liftIO $ S.createShoe shoe
-                   Web.Scotty.json r
+    case (eitherDecode jsonShoe) :: Either String J.ShoeJSON  of
+       Left e -> Web.Scotty.json $ APIFailure e
+       Right shoe -> do res <- liftIO $ S.createShoe shoe
+                        case res of
+                             Left e -> Web.Scotty.json e
+                             Right id -> Web.Scotty.json id
+
+
 
 allShoes = do s <- liftIO S.findShoes
               html $ L.pack $ V.renderAllShoes s
+
 
 shoeById id = do s <- liftIO $ S.findShoeById id
                  case s of
@@ -41,9 +50,6 @@ shoeById id = do s <- liftIO $ S.findShoeById id
 
 
 main = scotty 3000 $ do
-  get "/test/:word" $ do
-    beam <- param "word"
-    html $ mconcat ["<h1>Scotty, ", beam, " me up!</h1>"]
   post "/shoes" $ do
     shoeJ <- body
     createShoe shoeJ
@@ -52,3 +58,4 @@ main = scotty 3000 $ do
   get "/shoes/:id" $ do
     id <- param "id"
     shoeById id
+  middleware $ staticPolicy (noDots >-> addBase "static")

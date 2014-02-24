@@ -10,12 +10,15 @@ import Data.Maybe
 import Control.Monad.IO.Class
 import Text.Read
 import qualified ShoeJSON as J
+import qualified Codec.Binary.Base64 as Base64
+import Data.Binary.Put
+import qualified Data.ByteString.Lazy as BL
 
 data Shoe =
      Shoe { description :: !Text
           , color :: !Text
           , size :: Double
-          , photo :: !Text
+          , photo :: FilePath
           , shoeId :: Maybe ObjectId
           } deriving (Show)
 
@@ -54,28 +57,36 @@ pluckOid k d =
 shoeFromBSON b = Shoe {description = pluckString "description" b,
                        color = pluckString "color" b,
                        size = pluckNum "size" b,
-                       photo = pluckString "photo" b,
+                       photo = unpack $ pluckString "photo" b,
                        shoeId = Just $ pluckOid "_id" b}
 
 
 shoeFromJShoe js = Shoe {description = J.description js,
                         color = J.color js,
                         size = J.size js,
-                        photo = J.photo js,
+                        photo = "",
                         shoeId = Nothing}
 
 
 
 runA pipe act = access pipe master "zalora" act
 
-
+createShoe :: J.ShoeJSON -> IO (Either String String)
 createShoe js =
-           let bsonShoe = shoeToBSON $ shoeFromJShoe js
-           in
-           do pipe <- runIOE $ connect $ host "127.0.0.1"
-              id <- runA pipe $ insert "shoes" bsonShoe
-              putStrLn $ show id
-              return $ show id
+           do id <- genObjectId
+              let fname = ((show id) ++ ".jpg")
+              putStrLn ("Trying to save file at " ++ fname)
+              imgRes <- serialiseImg fname $ unpack $ J.photo js
+              case imgRes of
+                   Right _ -> do
+                                 let shoe = shoeFromJShoe js
+                                 let bsonShoe = shoeToBSON $ shoe {photo = fname}
+                                 pipe <- runIOE $ connect $ host "127.0.0.1"
+                                 res <- runA pipe $ insert "shoes" bsonShoe
+                                 case res of
+                                      Right id -> return $ Right $ show id
+                                      Left _ -> return $ Left "Db Failure"
+                   Left e -> return $ Left e
 
 findShoes =
           do pipe <- runIOE $ connect $ host "127.0.0.1"
@@ -94,3 +105,13 @@ findShoeById id =
                   return $ case shoe of
                        Right (Just s) -> Right $ shoeFromBSON s
                        _ -> Left "No Result"
+
+
+serialiseImg :: FilePath -> String -> IO (Either String String)
+serialiseImg filename img =
+    case Base64.decode img of
+         Just ws -> do
+                       BL.writeFile ("static/img/" ++ filename) $ runPut $ mapM_ putWord8 ws
+                       return $  Right "success"
+         Nothing -> do
+                       return $ Left "Error in decoding base64"
