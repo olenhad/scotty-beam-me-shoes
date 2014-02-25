@@ -13,6 +13,7 @@ import qualified ShoeJSON as J
 import qualified Codec.Binary.Base64 as Base64
 import Data.Binary.Put
 import qualified Data.ByteString.Lazy as BL
+import Data.Either
 
 data Shoe =
      Shoe { description :: !Text
@@ -71,22 +72,24 @@ shoeFromJShoe js = Shoe {description = J.description js,
 
 runA pipe act = access pipe master "zalora" act
 
+
+
 createShoe :: J.ShoeJSON -> IO (Either String String)
 createShoe js =
            do id <- genObjectId
+
               let fname = ((show id) ++ ".jpg")
+              let shoe = shoeFromJShoe js
+              let bsonShoe = shoeToBSON $ shoe {photo = fname}
+
               putStrLn ("Trying to save file at " ++ fname)
               imgRes <- serialiseImg fname $ unpack $ J.photo js
-              case imgRes of
-                   Right _ -> do
-                                 let shoe = shoeFromJShoe js
-                                 let bsonShoe = shoeToBSON $ shoe {photo = fname}
-                                 pipe <- runIOE $ connect $ host "127.0.0.1"
-                                 res <- runA pipe $ insert "shoes" bsonShoe
-                                 case res of
-                                      Right id -> return $ Right $ show id
-                                      Left _ -> return $ Left "Db Failure"
-                   Left e -> return $ Left e
+              pipe <- runIOE $ connect $ host "127.0.0.1"
+              res <- runA pipe $ insert "shoes" bsonShoe
+
+              case res of
+                   Right id -> return $ Right $ show id
+                   Left _ -> return $ Left "Db Error"
 
 findShoes =
           do pipe <- runIOE $ connect $ host "127.0.0.1"

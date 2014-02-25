@@ -1,16 +1,17 @@
 {-# LANGUAGE OverloadedStrings, DeriveGeneric #-}
 
 import Web.Scotty
+import Network.Wai.Middleware.Static
 
 import Data.Monoid (mconcat)
-
 import Data.Aeson
 import Data.Text.Lazy as L
 import Data.ByteString.Lazy
 import Data.ByteString.Lazy as BL
-import Control.Applicative
+
 import Control.Monad
 import Control.Monad.IO.Class
+
 import GHC.Generics
 
 import Database.MongoDB
@@ -20,7 +21,7 @@ import qualified Shoe as S
 import qualified ShoeJSON as J
 import qualified Views as V
 
-import Network.Wai.Middleware.Static
+
 
 data APIFailure =
      APIFailure {reason :: String} deriving (Show, Generic)
@@ -34,7 +35,7 @@ createShoe jsonShoe =
        Left e -> Web.Scotty.json $ APIFailure e
        Right shoe -> do res <- liftIO $ S.createShoe shoe
                         case res of
-                             Left e -> Web.Scotty.json e
+                             Left e -> Web.Scotty.json $ APIFailure e
                              Right id -> Web.Scotty.json id
 
 
