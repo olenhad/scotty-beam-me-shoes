@@ -29,25 +29,27 @@ data APIFailure =
 instance ToJSON APIFailure
 
 
+render :: (Either String a) -> (a -> ActionM ()) -> ActionM ()
+render res act =
+       case res of
+            Left err -> Web.Scotty.json $ APIFailure err
+            Right s -> act s
+
 createShoe :: BL.ByteString -> ActionM ()
 createShoe jsonShoe =
     case (eitherDecode jsonShoe) :: Either String J.ShoeJSON  of
        Left e -> Web.Scotty.json $ APIFailure e
        Right shoe -> do res <- liftIO $ S.createShoe shoe
-                        case res of
-                             Left e -> Web.Scotty.json $ APIFailure e
-                             Right id -> Web.Scotty.json id
+                        render res Web.Scotty.json
+
+allShoes :: ActionM ()
+allShoes = do ss <- liftIO S.findShoes
+              render ss $ html . L.pack . V.renderAllShoes
 
 
-
-allShoes = do s <- liftIO S.findShoes
-              html $ L.pack $ V.renderAllShoes s
-
-
+shoeById :: String -> ActionM ()
 shoeById id = do s <- liftIO $ S.findShoeById id
-                 case s of
-                      Left m -> html $ mconcat ["Error! ", L.pack m]
-                      Right s -> html $ L.pack $ V.renderSingleShoe s
+                 render s $ html . L.pack . V.renderSingleShoe
 
 
 main = scotty 3000 $ do

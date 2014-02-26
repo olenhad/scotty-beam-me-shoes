@@ -8,6 +8,7 @@ import Data.Aeson
 import Data.Text
 import Data.Maybe
 import Control.Monad.IO.Class
+import Control.Monad
 import Text.Read
 import qualified ShoeJSON as J
 import qualified Codec.Binary.Base64 as Base64
@@ -70,7 +71,17 @@ shoeFromJShoe js = Shoe {description = J.description js,
 
 
 
-runA pipe act = access pipe master "zalora" act
+
+sharedPipe :: IO Pipe
+sharedPipe = runIOE $ connect $ host "127.0.0.1"
+
+
+runA :: (MonadIO m) => Action m a -> m (Either String a)
+runA act = do pipe <- liftIO sharedPipe
+              res <- access pipe master "zalora" act
+              case res of
+                   Right a -> return $ Right a
+                   Left f -> return $ Left "DB Error"
 
 
 
@@ -84,27 +95,22 @@ createShoe js =
 
               putStrLn ("Trying to save file at " ++ fname)
               imgRes <- serialiseImg fname $ unpack $ J.photo js
-              pipe <- runIOE $ connect $ host "127.0.0.1"
-              res <- runA pipe $ insert "shoes" bsonShoe
+              res <- runA $ insert "shoes" bsonShoe
+              return $ liftM show res
 
-              case res of
-                   Right id -> return $ Right $ show id
-                   Left _ -> return $ Left "Db Error"
 
+findShoes :: IO (Either String [Shoe])
 findShoes =
-          do pipe <- runIOE $ connect $ host "127.0.0.1"
-             shoes <- runA pipe $ DB.find (select [] "shoes") >>= rest
-             return $ case shoes of
-                           Right ss -> Prelude.map  shoeFromBSON ss
-                           Left _ -> error "BC"
+          do shoes <- runA (DB.find (select [] "shoes") >>= rest)
+             return $ liftM (Prelude.map shoeFromBSON) shoes
+
 
 findShoeById :: String -> IO (Either String Shoe)
 findShoeById id =
     case (readEither id :: Either String ObjectId) of
          Left e ->  do return $ Left e
          Right oid ->
-               do pipe <- runIOE $ connect $ host "127.0.0.1"
-                  shoe <- runA pipe $ DB.findOne $ select ["_id" =: oid] "shoes"
+               do shoe <- runA $ DB.findOne $ select ["_id" =: oid] "shoes"
                   return $ case shoe of
                        Right (Just s) -> Right $ shoeFromBSON s
                        _ -> Left "No Result"
@@ -113,8 +119,6 @@ findShoeById id =
 serialiseImg :: FilePath -> String -> IO (Either String String)
 serialiseImg filename img =
     case Base64.decode img of
-         Just ws -> do
-                       BL.writeFile ("static/img/" ++ filename) $ runPut $ mapM_ putWord8 ws
+         Just ws -> do BL.writeFile ("static/img/" ++ filename) $ runPut $ mapM_ putWord8 ws
                        return $  Right "success"
-         Nothing -> do
-                       return $ Left "Error in decoding base64"
+         Nothing -> do return $ Left "Error in decoding base64"
