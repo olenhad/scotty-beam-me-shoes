@@ -2,6 +2,7 @@
 
 import Web.Scotty
 import Network.Wai.Middleware.Static
+import Network.HTTP.Types
 
 import Data.Monoid (mconcat)
 import Data.Aeson
@@ -32,7 +33,8 @@ instance ToJSON APIFailure
 render :: (Either String a) -> (a -> ActionM ()) -> ActionM ()
 render res act =
        case res of
-            Left err -> Web.Scotty.json $ APIFailure err
+            Left err -> do status internalServerError500
+                           Web.Scotty.json $ APIFailure err
             Right s -> act s
 
 createShoe :: BL.ByteString -> ActionM ()
