@@ -54,6 +54,7 @@ shoeById id = do s <- liftIO $ S.findShoeById id
                  render s $ html . L.pack . V.renderSingleShoe
 
 
+main :: IO ()
 main = scotty 3000 $ do
   post "/shoes" $ do
     shoeJ <- body

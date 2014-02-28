@@ -25,7 +25,7 @@ data Shoe =
           } deriving (Show)
 
 
-
+shoeToBSON :: Shoe -> [Field]
 shoeToBSON shoe =
    let base = ["description" =: description shoe,
                "color" =: color shoe,
@@ -36,18 +36,19 @@ shoeToBSON shoe =
       Just id -> merge base ["_id" =: id]
 
 
-
+pluckString :: Label -> Document -> Text
 pluckString k d =
   case valueAt k d of
       B.String s -> s
       _ -> error "Not a string!"
 
-
+pluckNum :: Label -> Document -> Double
 pluckNum k d =
   case valueAt k d of
       B.Float s -> s
       _ -> error "Not a number!"
 
+pluckOid :: Label -> Document -> ObjectId
 pluckOid k d =
   case valueAt k d of
       B.ObjId s -> s
@@ -55,14 +56,14 @@ pluckOid k d =
 
 
 
-
+shoeFromBSON :: Document -> Shoe
 shoeFromBSON b = Shoe {description = pluckString "description" b,
                        color = pluckString "color" b,
                        size = pluckNum "size" b,
                        photo = unpack $ pluckString "photo" b,
                        shoeId = Just $ pluckOid "_id" b}
 
-
+shoeFromJShoe :: J.ShoeJSON -> Shoe
 shoeFromJShoe js = Shoe {description = J.description js,
                         color = J.color js,
                         size = J.size js,
